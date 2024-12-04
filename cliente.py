@@ -15,6 +15,7 @@ def main():
     try:
         # Recibir respuesta del servidor
         response = client.recv(1024).decode('utf-8')  # Recibe 1024 bytes como máximo
+        print("Respuesta recibida del servidor:", response)  # Agrega esta línea
         results = json.loads(response)
 
         # Mostrar resultados
@@ -26,6 +27,7 @@ def main():
 
     except Exception as e:
         print(f"Error al recibir los resultados: {e}")
+
 
     client.close()
 
