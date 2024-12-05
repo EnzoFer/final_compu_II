@@ -1,60 +1,51 @@
 import socket
 import threading
+import requests
+from concurrent.futures import ThreadPoolExecutor
+import json
+
+API_BASE_URL = "https://api.mercadolibre.com/sites/MLM/search"
+
+def search_product(product):
+    params = {
+        'q': product,
+        'limit': 5
+    }
+    response = requests.get(API_BASE_URL, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        results = []
+        for item in data.get('results', []):
+            title = item.get('title', 'Sin título')
+            price = item.get('price', 'Precio no disponible')
+            results.append(f"{title}: ${price}")
+        return results if results else ["No se encontraron productos"]
+    else:
+        return ["Error al buscar productos"]
 
 def handle_client(client_socket):
-    # Recibir solicitud del cliente
-    product = client_socket.recv(1024).decode('utf-8')
-    print(f"Buscando productos relacionados con: {product}")
-
-    # Realizar scraping concurrente
-    results = {}
-    threads = []
-
-    def scrape_ml():
-        results['Mercado Libre'] = scrape_mercado_libre(product)
-
-    def scrape_amz():
-        results['Amazon'] = scrape_amazon(product)
-
-    t1 = threading.Thread(target=scrape_ml)
-    t2 = threading.Thread(target=scrape_amz)
-
-    t1.start()
-    t2.start()
-    threads.append(t1)
-    threads.append(t2)
-
-    for thread in threads:
-        thread.join()
-
-    # Imprimir los resultados antes de enviarlos
-    print("Enviando resultados:", results)
-
-    # Enviar resultados al cliente
-    client_socket.send(json.dumps(results).encode('utf-8'))
+    request = client_socket.recv(1024).decode()
+    print(f"Received request: {request}")
+    
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future = executor.submit(search_product, request)
+        prices = future.result()
+    
+    response = json.dumps(prices)
+    client_socket.send(response.encode())
     client_socket.close()
 
-def main():
-    print("Inicializando servidor...")
-    try:
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print("Socket creado.")
-        server.bind(('localhost', 12345))
-        print("Socket enlazado en el puerto 12345.")
-        server.listen(5)
-        print("Servidor escuchando en el puerto 12345...")
-    except Exception as e:
-        print(f"Error al iniciar el servidor: {e}")
-        return
+def start_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(('0.0.0.0', 8888))
+    server.listen(5)
+    print("Server listening on port 8888")
 
     while True:
-        try:
-            print("Esperando conexiones...")
-            client_socket, addr = server.accept()
-            print(f"Conexión establecida con {addr}")
-            threading.Thread(target=handle_client, args=(client_socket,)).start()
-        except Exception as e:
-            print(f"Error manejando cliente: {e}")
+        client, addr = server.accept()
+        print(f"Accepted connection from {addr}")
+        client_handler = threading.Thread(target=handle_client, args=(client,))
+        client_handler.start()
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    start_server()
