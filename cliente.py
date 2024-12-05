@@ -17,5 +17,7 @@ if __name__ == "__main__":
         results = send_request(product)
         print(f"\nResultados encontrados para '{product}':")
         for result in results:
-            print(result)
-        print()
+            print(f"Título: {result['title']}")
+            print(f"Precio: ARS ${result['price']:,.2f}")
+            print(f"Enlace: {result['link']}")
+            print()

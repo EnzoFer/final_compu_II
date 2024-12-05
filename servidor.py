@@ -4,7 +4,7 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 import json
 
-API_BASE_URL = "https://api.mercadolibre.com/sites/MLM/search"
+API_BASE_URL = "https://api.mercadolibre.com/sites/MLA/search"
 
 def search_product(product):
     params = {
@@ -18,10 +18,15 @@ def search_product(product):
         for item in data.get('results', []):
             title = item.get('title', 'Sin título')
             price = item.get('price', 'Precio no disponible')
-            results.append(f"{title}: ${price}")
-        return results if results else ["No se encontraron productos"]
+            link = item.get('permalink', 'Enlace no disponible')
+            results.append({
+                'title': title,
+                'price': price,
+                'link': link
+            })
+        return results if results else [{"title": "No se encontraron productos", "price": "", "link": ""}]
     else:
-        return ["Error al buscar productos"]
+        return [{"title": "Error al buscar productos", "price": "", "link": ""}]
 
 def handle_client(client_socket):
     request = client_socket.recv(1024).decode()
@@ -29,9 +34,9 @@ def handle_client(client_socket):
     
     with ThreadPoolExecutor(max_workers=5) as executor:
         future = executor.submit(search_product, request)
-        prices = future.result()
+        results = future.result()
     
-    response = json.dumps(prices)
+    response = json.dumps(results)
     client_socket.send(response.encode())
     client_socket.close()
 
