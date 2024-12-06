@@ -1,7 +1,7 @@
 import socket
-import threading
-import requests
+import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
+import requests
 import json
 
 API_BASE_URL = "https://api.mercadolibre.com/sites/MLA/search"
@@ -49,8 +49,11 @@ def start_server():
     while True:
         client, addr = server.accept()
         print(f"Accepted connection from {addr}")
-        client_handler = threading.Thread(target=handle_client, args=(client,))
-        client_handler.start()
+        
+        # Crear un nuevo proceso para manejar el cliente
+        process = multiprocessing.Process(target=handle_client, args=(client,))
+        process.start()
+        client.close()  # Cerrar el socket del cliente en el proceso principal
 
 if __name__ == "__main__":
     start_server()
