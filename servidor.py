@@ -2,50 +2,85 @@ import requests
 import json
 import socket
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-API_BASE_URL = "https://api.mercadolibre.com/sites/MLA/search"
+API_BASE_URL_ARG = "https://api.mercadolibre.com/sites/MLA/search"
+API_BASE_URL_CHL = "https://api.mercadolibre.com/sites/MLC/search"
+EXCHANGE_RATE_API = "https://api.exchangerate-api.com/v4/latest/USD"
 
-def search_product(product):
+def get_exchange_rates():
+    try:
+        response = requests.get(EXCHANGE_RATE_API)
+        data = response.json()
+        return {
+            'ARS': data['rates']['ARS'],
+            'CLP': data['rates']['CLP']
+        }
+    except Exception as e:
+        print(f"Error al obtener tasas de cambio: {e}")
+        return None
+
+def search_product(product, country_url):
     params = {
         'q': product,
-        'limit': 50  # Obtener más resultados para un mejor filtrado
+        'limit': 5,
+        'sort': 'relevance'
     }
-    response = requests.get(API_BASE_URL, params=params)
+    response = requests.get(country_url, params=params)
     if response.status_code == 200:
         data = response.json()
         raw_results = data.get('results', [])
         
-        # Filtrar resultados válidos con precio y ordenarlos por precio ascendente
         filtered_results = [
             {
                 'title': item.get('title', 'Sin título'),
-                'price': item.get('price', float('inf')),
-                'link': item.get('permalink', 'Enlace no disponible')
+                'price': item.get('price', 0),
+                'link': item.get('permalink', 'Enlace no disponible'),
+                'currency': item.get('currency_id', '')
             }
             for item in raw_results if item.get('price') is not None
         ]
-        filtered_results.sort(key=lambda x: x['price'])  # Ordenar por precio
-
-        # Retornar los mejores 5 resultados
-        return filtered_results[:5] if filtered_results else [{"title": "No se encontraron productos", "price": "", "link": ""}]
+        
+        return filtered_results if filtered_results else [{"title": "No se encontraron productos", "price": 0, "link": "", "currency": ""}]
     else:
-        return [{"title": "Error al buscar productos", "price": "", "link": ""}]
+        return [{"title": "Error al buscar productos", "price": 0, "link": "", "currency": ""}]
 
 def handle_client(client_socket):
     try:
         request = client_socket.recv(1024).decode()
         print(f"Received request: {request}")
         
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            future = executor.submit(search_product, request.strip())
-            results = future.result()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(get_exchange_rates): 'exchange_rates',
+                executor.submit(search_product, request.strip(), API_BASE_URL_ARG): 'argentina',
+                executor.submit(search_product, request.strip(), API_BASE_URL_CHL): 'chile'
+            }
+            
+            results = {'exchange_rates': None, 'argentina': [], 'chile': []}
+            
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    results[key] = future.result()
+                except Exception as e:
+                    print(f"Error en {key}: {e}")
+        
+        if results['exchange_rates']:
+            for country in ['argentina', 'chile']:
+                for result in results[country]:
+                    if result['currency'] == 'ARS':
+                        result['price_usd'] = result['price'] / results['exchange_rates']['ARS']
+                    elif result['currency'] == 'CLP':
+                        result['price_usd'] = result['price'] / results['exchange_rates']['CLP']
         
         response = json.dumps(results, ensure_ascii=False)
         client_socket.send(response.encode())
     except Exception as e:
         print(f"Error handling client: {e}")
-        error_response = json.dumps([{"title": "Error interno", "price": "", "link": ""}])
+        error_response = json.dumps({'argentina': [{"title": "Error interno", "price": 0, "link": "", "currency": ""}],
+                                     'chile': [{"title": "Error interno", "price": 0, "link": "", "currency": ""}],
+                                     'exchange_rates': None})
         client_socket.send(error_response.encode())
     finally:
         client_socket.close()
