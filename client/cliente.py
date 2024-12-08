@@ -3,7 +3,7 @@ import json
 
 def send_request(product):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect(('localhost', 8888))
+    client.connect(('server', 8888))
     client.send(product.encode())
     response = client.recv(8192).decode()
     client.close()

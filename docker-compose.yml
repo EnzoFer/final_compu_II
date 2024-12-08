@@ -1,0 +1,13 @@
+version: "1.1"
+
+services:
+  server:
+    build: ./server/
+    ports:
+      - "8888:8888"
+  client:
+      build: ./client/
+      stdin_open: true
+      tty: true
+      depends_on:
+        - server
