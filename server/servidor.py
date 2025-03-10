@@ -4,11 +4,39 @@ import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Credenciales de tu aplicación
+CLIENT_ID = "2371186717800082"
+CLIENT_SECRET = "3KnwijF4XdDAennKcsWL4yBvGOwHZF9w"
+
+# URLs de la API de Mercado Libre
 API_BASE_URL_ARG = "https://api.mercadolibre.com/sites/MLA/search"
 API_BASE_URL_CHL = "https://api.mercadolibre.com/sites/MLC/search"
 EXCHANGE_RATE_API = "https://api.exchangerate-api.com/v4/latest/USD"
 
+# URL para obtener el token de acceso
+TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
+
+# Token de acceso (se obtiene dinámicamente)
+ACCESS_TOKEN = None
+
+def get_access_token():
+    """Obtiene un token de acceso usando el Client ID y Client Secret."""
+    global ACCESS_TOKEN
+    payload = {
+        "grant_type": "client_credentials",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET
+    }
+    response = requests.post(TOKEN_URL, data=payload)
+    if response.status_code == 200:
+        ACCESS_TOKEN = response.json().get("access_token")
+        print("Token de acceso obtenido correctamente.")
+    else:
+        print(f"Error al obtener el token: {response.status_code}")
+        ACCESS_TOKEN = None
+
 def get_exchange_rates():
+    """Obtiene las tasas de cambio."""
     try:
         response = requests.get(EXCHANGE_RATE_API)
         data = response.json()
@@ -21,12 +49,20 @@ def get_exchange_rates():
         return None
 
 def search_product(product, country_url):
+    """Busca productos en la API de Mercado Libre."""
+    global ACCESS_TOKEN
+    if not ACCESS_TOKEN:
+        get_access_token()  # Obtener un nuevo token si no hay uno
+    
+    headers = {
+        "Authorization": f"Bearer {ACCESS_TOKEN}"
+    }
     params = {
         'q': product,
         'limit': 5,
         'sort': 'relevance'
     }
-    response = requests.get(country_url, params=params)
+    response = requests.get(country_url, headers=headers, params=params)
     if response.status_code == 200:
         data = response.json()
         raw_results = data.get('results', [])
@@ -43,9 +79,11 @@ def search_product(product, country_url):
         
         return filtered_results if filtered_results else [{"title": "No se encontraron productos", "price": 0, "link": "", "currency": ""}]
     else:
+        print(f"Error en la búsqueda: {response.status_code}")
         return [{"title": "Error al buscar productos", "price": 0, "link": "", "currency": ""}]
 
 def handle_client(client_socket):
+    """Maneja las solicitudes de los clientes."""
     try:
         request = client_socket.recv(1024).decode()
         print(f"Received request: {request}")
@@ -86,6 +124,7 @@ def handle_client(client_socket):
         client_socket.close()
 
 def start_server():
+    """Inicia el servidor."""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(('0.0.0.0', 8888))
     server.listen(5)
@@ -98,4 +137,6 @@ def start_server():
         client_handler.start()
 
 if __name__ == "__main__":
+    # Obtener el token de acceso al iniciar el servidor
+    get_access_token()
     start_server()
