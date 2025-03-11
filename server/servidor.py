@@ -1,12 +1,19 @@
+import os
 import requests
 import json
 import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dotenv import load_dotenv
 
-# Credenciales de tu aplicación
-CLIENT_ID = "2371186717800082"
-CLIENT_SECRET = "3KnwijF4XdDAennKcsWL4yBvGOwHZF9w"
+load_dotenv()
+
+# Credenciales 
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+if not CLIENT_ID or not CLIENT_SECRET:
+    raise ValueError("Las variables de entorno CLIENT_ID y CLIENT_SECRET no están definidas.")
 
 # URLs de la API de Mercado Libre
 API_BASE_URL_ARG = "https://api.mercadolibre.com/sites/MLA/search"
@@ -16,7 +23,8 @@ EXCHANGE_RATE_API = "https://api.exchangerate-api.com/v4/latest/USD"
 # URL para obtener el token de acceso
 TOKEN_URL = "https://api.mercadolibre.com/oauth/token"
 
-# Token de acceso (se obtiene dinámicamente)
+
+# Token de acceso
 ACCESS_TOKEN = None
 
 def get_access_token():
@@ -49,10 +57,10 @@ def get_exchange_rates():
         return None
 
 def search_product(product, country_url):
-    """Busca productos en la API de Mercado Libre."""
+    
     global ACCESS_TOKEN
     if not ACCESS_TOKEN:
-        get_access_token()  # Obtener un nuevo token si no hay uno
+        get_access_token()  
     
     headers = {
         "Authorization": f"Bearer {ACCESS_TOKEN}"
